@@ -1,0 +1,198 @@
+---
+title: "Iconicity Analyses"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+###Load required packages
+```{r results='hide', warning=FALSE, message=FALSE}
+packages = c("tidyverse","ggplot2","beeswarm","colorspace", "stargazer", "MASS", "ordinal", "generalhoslem", "qwraps2", "gridExtra","ggpubr","sure", "VGAM", "truncreg", "car", "rmarkdown", "table1", "kableExtra", "epitools")
+package.check <- lapply(packages, FUN = function(x) {
+  if (!require(x, character.only = TRUE)) {
+    install.packages(x, dependencies = TRUE)
+    library(x, character.only = TRUE)
+  }
+})
+
+#verify they are loaded
+search()
+
+```
+
+###Check and then set working dir
+```{r results='hide', echo=FALSE}
+setwd("/Users/emilycarrigan/Dropbox/Data Analysis Work") ##this should be wherever your file is saved 
+
+GiveN <- read.csv("GN_Smsummary_Lgall_200409.csv", na.strings = c("N/A", "I/R", "", "TBD")) #import the data file (which I already saved as a csv from excel file)
+typeof(GiveN) # when importing using read.csv, resulting obj type is a list
+View(GiveN)
+```
+
+###DATA CLEANING/PREP/CHECK
+```{r}
+GiveN_subset <- GiveN[1:237,] #if you need to remove blank rows/unnecessary columns in the dataframe, subset by [row,column] ranges
+View(GiveN_subset)
+GiveN_subset <- subset(GiveN_subset, Including.in.Study.=='Yes' & Including_GiveN.=='Yes' & GN_Small_Ceiling._FinalSet_conservative!='') # This can be amended as necessary for the specific analyses 
+View(GiveN_subset)
+
+str(GiveN_subset) # check the data
+#Age and SES SHOULD import as 'num' type (bc decimal points)
+# All GiveN values should import as integer type (but we will convert them to factor below)
+## If they import as something other than integer, that typically means there is text in one of the cells in that column OTHER than the "N/A" string
+summary(GiveN_subset) # check whether have missing values for any variables
+
+#reorder factor levels for Language Group so they show up in order I want them
+GiveN_subset$LanguageGroup <- as.factor(factor(as.character(GiveN_subset$Group_4cat), levels = c("English Early", "ASL Early", "English Later", "ASL Later"), exclude=NA))
+
+#BELOW uses names in MASTER spreadsheet
+GiveN_subset$GN_sm_fac_c <- as.factor(GiveN_subset$GN_Small_Ceiling._FinalSet_conservative)
+GiveN_subset$GN_ALL_sm_fac <- as.factor(GiveN_subset$GN_Small_Ceiling._FinalSet)
+
+
+#Create Modality and Timing variables and add to dataframe
+GiveN_subset$Language_Modality <- ifelse(GiveN_subset$Group_4cat == "English Early" | GiveN_subset$Group_4cat == "English Later", "English", "ASL")
+
+GiveN_subset$Language_Timing <- factor(as.character(GiveN_subset$Group_2cat), levels = c("Early", "Later"), exclude="")
+##ORDER MATTERS - I initially acidentally ordered things "Later", "Early", which actually reversed the automatically alphabetically ordered variables in the original Group2Cat (and labeled the opposite of what they actually were--didn't realize until I ran the models and was confused about why it seemed like Early exposed kids were doing worse--YIKES!)
+
+#subset only Early-exposed participants
+GiveN_Early <- subset(GiveN_subset, GiveN_subset$Language_Timing=="Early" & GiveN_subset$Age>=3.4)
+#removing the kids in English early under Age 3.4 (youngest age for ASL early) to age match the samples a bit better only removes 3 kids (now 101 instead of 104)
+View(GiveN_Early)
+```
+
+###ASSIGN shorter VARIABLE names
+```{r}
+#outcome vars (these two are the same variable, but represented as either an integer or a factor)
+GN_sm_int <- GiveN_Early$GN_Small_Ceiling._FinalSet_conservative #KL drawing only from Give-N small data (which all children completed)
+GN_sm_fac <- GiveN_Early$GN_sm_fac_c
+
+#predictors
+Age <- GiveN_Early$Age
+SES <- GiveN_Early$SES..8.66.
+LangGrp <- GiveN_Early$LanguageGroup
+Count_NObj <- GiveN_Early$Highest_Count_noobj
+Count_WObj <- GiveN_Early$Highest_Count_wobj
+MAX_count_seq <- GiveN_Early$MAX_COUNT_SEQ
+Modality <- GiveN_Early$Language_Modality
+Timing <- GiveN_Early$Language_Timing
+
+```
+
+
+###Demographics & Basic plots
+```{r}
+summary(Age)
+sd(Age)
+summary(Age >7) #tells you how many kids over age 7
+summary(Age ==7)
+summary(Age=='')#check for missing values
+summary(SES)
+sd(SES)
+summary(SES=='')#check for missing values
+
+summary(LangGrp)
+summary(Timing)
+summary(Modality)
+summary(Count_NObj)
+
+#TO GET AGES/SES etc by group
+aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = mean) # gives means by group!!!
+aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = min) # gives means by group!!!
+aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = max) # gives means by group!!!
+aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = sd) # gives means by group!!!
+
+ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=LangGrp, y=Age)) + geom_violin() + labs(x="Language Group", y="Age (years)")
+
+
+aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = mean) # gives means by group!!!
+aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = min) # gives means by group!!!
+aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = max) # gives means by group!!!
+aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = sd) # gives means by group!!!
+
+jitter <- position_jitter(width=0.2, height=0.1)
+
+ggplot(data=subset(GiveN_Early, (Language_Modality=="ASL")), aes(x=SES..8.66., y=..count..)) + geom_density()
+ggplot(data=subset(GiveN_Early, (Language_Modality=="English")), aes(x=SES..8.66., y=..count..)) + geom_density()
+
+ggplot(data=subset(GiveN_Early, (Language_Modality=="ASL")), aes(x=Age, y=..count..)) + geom_density()
+ggplot(data=subset(GiveN_Early, (Language_Modality=="English")), aes(x=Age, y=..count..)) + geom_density()
+
+ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geom_point(aes(shape=Modality, color=Modality), position=jitter, size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 6)")
+ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geom_jitter(aes(shape=Modality, color=Modality), size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 6)")
+```
+
+###Subsetting the data by age
+We have quite a few participants at ceiling on Give-N, likely because of our age range, and this may be obscuring any potential group differences--so we subset to a smaller age range, using information on the distribution of ages
+```{r}
+##TABLE OF AGES
+#set up age bins first
+# set up cut-off values 
+breaks <- c(3.4, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.6)
+# specify interval/bin labels
+tags <- c("[3.4-4)","[4-4.5)", "[4.5-5)", "[5-5.5)", "[5.5-6)", "[6-6.5)","[6.5-7)", "[7-7.6)")
+# bucketing values into bins
+GiveN_Early$AgeBins <- cut(GiveN_Early$Age, 
+                  breaks=breaks, 
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=tags)
+# inspect bins
+summary(GiveN_Early$AgeBins)
+
+##make the tables
+table(GiveN_Early$AgeBins, GiveN_Early$Language_Modality)
+prop.table(table(GiveN_Early$AgeBins, GiveN_Early$Language_Modality))
+
+#set up DIFFERENT age bins first
+# set up cut-off values 
+breaks_fewer<- c(3.4, 4.5, 5.5, 6.5, 7.6)
+# specify interval/bin labels
+tags_fewer <- c("[3.4-4.5)","[4.5-5.5)", "[5.5-6.5)", "[6.5-7.6)")
+# bucketing values into bins
+GiveN_Early$AgeBinsFewer <- cut(GiveN_Early$Age, 
+                           breaks=breaks_fewer, 
+                           include.lowest=TRUE, 
+                           right=FALSE, 
+                           labels=tags_fewer)
+# inspect bins
+summary(GiveN_Early$AgeBinsFewer)
+
+##make the tables
+table(GiveN_Early$AgeBinsFewer, GiveN_Early$Language_Modality)
+prop.table(table(GiveN_Early$AgeBinsFewer, GiveN_Early$Language_Modality))
+```
+
+Based on charts and participant, we decided to subset the data to participants under 5.5 years of age
+```{r}
+GiveN_3_to_5_half <- subset(GiveN_Early, Age <5.6) 
+View(GiveN_3_to_5_half)
+
+##Contingency table for do kids know 5 or not by group
+GiveN_3_to_5_half <- GiveN_3_to_5_half %>% dplyr::mutate(At_5 = ifelse(GN_Small_Ceiling._FinalSet_conservative>=5, "Yes", "No"))
+View(GiveN_3_to_5_half)
+
+##Table of how many kids "are "know 5" (or higher) by group (Contingency table)
+table1::label(GiveN_3_to_5_half$At_5) <- "Does child know up to 5?"
+table1::table1(~At_5 | Language_Modality, data = GiveN_3_to_5_half)
+
+```
+
+##QUESTION: Within this age group, do we see different proportions of kids who are 5-knowers vs. not
+
+```{r}
+
+#Using risk ratio code to see if English group sig different from ASL group
+Early_ASL_v_English_know5 <- matrix(c(8,12,19,36), 2, 2, byrow=TRUE)
+dimnames(Early_ASL_v_English_know5) <- list("Group" = c("Early ASL", "Early English (Typically Hearing)"), "Does child know up to 5?" = c("No", "Yes"))
+Early_ASL_v_English_know5
+riskratio.small(Early_ASL_v_English_know5)
+
+```
+
+
+Risk ratio analysis indicates that Early English participants aged 3.5-5.5 years are equally likely to be 5-knowers as Early ASL participants
