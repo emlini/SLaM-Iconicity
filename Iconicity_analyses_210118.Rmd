@@ -8,8 +8,10 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
 ```
 
-###Load required packages
+### Load required packages
 ```{r results='hide', warning=FALSE, message=FALSE}
+#from https://www.vikram-baliga.com/blog/2015/7/19/a-hassle-free-way-to-verify-that-r-packages-are-installed-and-loaded
+
 packages = c("tidyverse","ggplot2","beeswarm","colorspace", "stargazer", "MASS", "ordinal", "generalhoslem", "qwraps2", "gridExtra","ggpubr","sure", "VGAM", "truncreg", "car", "rmarkdown", "table1", "kableExtra", "epitools")
 package.check <- lapply(packages, FUN = function(x) {
   if (!require(x, character.only = TRUE)) {
@@ -23,16 +25,16 @@ search()
 
 ```
 
-###Check and then set working dir
+### Check and then set working dir
 ```{r results='hide', echo=FALSE}
 setwd("/Users/emilycarrigan/Dropbox/Data Analysis Work") ##this should be wherever your file is saved 
 
-GiveN <- read.csv("GN_Smsummary_Lgall_200409.csv", na.strings = c("N/A", "I/R", "", "TBD")) #import the data file (which I already saved as a csv from excel file)
+GiveN <- read.csv("GN_Smsummary_Lgall_KW_201106.csv", na.strings = c("N/A", "I/R", "", "TBD")) #import the data file (which I already saved as a csv from excel file)
 typeof(GiveN) # when importing using read.csv, resulting obj type is a list
 View(GiveN)
 ```
 
-###DATA CLEANING/PREP/CHECK
+### DATA CLEANING/PREP/CHECK
 ```{r}
 GiveN_subset <- GiveN[1:237,] #if you need to remove blank rows/unnecessary columns in the dataframe, subset by [row,column] ranges
 View(GiveN_subset)
@@ -65,7 +67,7 @@ GiveN_Early <- subset(GiveN_subset, GiveN_subset$Language_Timing=="Early" & Give
 View(GiveN_Early)
 ```
 
-###ASSIGN shorter VARIABLE names
+### ASSIGN shorter VARIABLE names
 ```{r}
 #outcome vars (these two are the same variable, but represented as either an integer or a factor)
 GN_sm_int <- GiveN_Early$GN_Small_Ceiling._FinalSet_conservative #KL drawing only from Give-N small data (which all children completed)
@@ -84,7 +86,7 @@ Timing <- GiveN_Early$Language_Timing
 ```
 
 
-###Demographics & Basic plots
+### Demographics & Basic plots
 ```{r}
 summary(Age)
 sd(Age)
@@ -126,7 +128,7 @@ ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geo
 ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geom_jitter(aes(shape=Modality, color=Modality), size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 6)")
 ```
 
-###Subsetting the data by age
+### Subsetting the data by age
 We have quite a few participants at ceiling on Give-N, likely because of our age range, and this may be obscuring any potential group differences--so we subset to a smaller age range, using information on the distribution of ages
 ```{r}
 ##TABLE OF AGES
@@ -181,9 +183,9 @@ table1::label(GiveN_3_to_5_half$At_5) <- "Does child know up to 5?"
 table1::table1(~At_5 | Language_Modality, data = GiveN_3_to_5_half)
 
 ```
+ ***
 
-##QUESTION: Within this age group, do we see different proportions of kids who are 5-knowers vs. not
-
+### QUESTION: Within this age group, do we see different proportions of kids who are 5-knowers vs. not?
 ```{r}
 
 #Using risk ratio code to see if English group sig different from ASL group
@@ -193,6 +195,43 @@ Early_ASL_v_English_know5
 riskratio.small(Early_ASL_v_English_know5)
 
 ```
+**Findings**: Risk ratio analysis indicates that Early English participants aged 3.5-5.5 years are equally likely to be 5-knowers as Early ASL participants
+<br>
+
+### Alternative analysis: Ordinal logistic regression
+Do children learning ASL progress through "knower-levels" at earlier ages/more rapidly than children learning spoken English
+```{r}
+## Recode the Give-N small variable so 
+GiveN_3_to_5_half$GN_upto_5 <- GiveN_3_to_5_half$GN_sm_fac_c
+str(GiveN_3_to_5_half$GN_upto_5)
+GiveN_3_to_5_half$GN_upto_5 <- dplyr::recode(GiveN_3_to_5_half$GN_upto_5, "6" = "5")
+str(GiveN_3_to_5_half$GN_upto_5)
+View(GiveN_3_to_5_half)
+GN_to_5 <-GiveN_3_to_5_half$GN_upto_5
+summary(GN_to_5)
+
+dplyr::filter(GiveN_3_to_5_half, LanguageGroup == "English Early") %>% count() #48 English Early kids in the above graph
+dplyr::filter(GiveN_3_to_5_half, LanguageGroup == "ASL Early") %>% count() #27 ASL Early kids in the above graph
+
+#Graph of Give-N scores (up to 6) for English Early participants only
+dplyr::filter(GiveN_3_to_5_half, GiveN_3_to_5_half$Group_4cat == "English Early") %>% ggplot(GiveN_3_to_5_half, mapping=aes(x=Age, y=GN_Small_Ceiling._FinalSet_conservative)) + geom_point(color = "grey39") + geom_smooth(method = "lm") + labs(x="Age (years)", y="Give-N Score") + theme(text = element_text(size=16)) + coord_cartesian(xlim = c(3,5.5), ylim= c(0,6))
 
 
-Risk ratio analysis indicates that Early English participants aged 3.5-5.5 years are equally likely to be 5-knowers as Early ASL participants
+
+# Scatterplot of Give-N by age separated by Modality (is slope steeper for ASL than for spoken English?)
+ggplot(GiveN_3_to_5_half, aes(x=Age, y=GN_Small_Ceiling._FinalSet_conservative)) + geom_point(aes(shape=Language_Modality, color=Language_Modality), position=jitter, size=2.5) + geom_smooth(mapping=aes(group=Language_Modality, color=Language_Modality), method="lm", se=FALSE) + labs(x="Child's Age (years)", y="Give-N Score") + scale_shape_manual(name="Language", labels=c("ASL (n=27)", "English (n=48)"), values=c(17, 16)) + scale_color_manual(name="Language", labels=c("ASL (n=27)", "English (n=48)"), values=c("mediumvioletred", "grey55")) + theme(text = element_text(size=14), legend.position = c(0.8, 0.2), legend.title = element_text(size=12, face="bold")) + coord_cartesian(xlim = c(3,5.5), ylim= c(0,6))
+
+
+
+
+j <- polr(formula = GN_upto_5 ~ SES..8.66. + Age * Language_Modality, data = GiveN_3_to_5_half, Hess = TRUE)
+summary(j)
+j$AIC <- AIC(j) #needed to get AIC in output table
+stargazer(j, title = "'Iconic' Number Symbols Do NOT Facilitate Number Knowledge for Early-Exposed DHH Children", align=TRUE, dep.var.labels=c("Give-N Highest Quantity Correct (up to 5)"), covariate.labels=c("Socioeconomic Status (SES)", "Age (Years)", "Language Modality (Spoken English)", "Age x Modality Interaction"), single.row=TRUE, keep.stat=c("n", "aic"), out= "GN_to5_SES_Modality*Age__EARLYONLY_210219.htm")
+
+#Question: DO WE HAVE THE POWER TO DETECT a MODALITY EFFECT if one existed?
+ # TO DO: Try looking at the confidence intervals of the coefficients
+
+
+```
+
