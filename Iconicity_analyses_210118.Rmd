@@ -1,7 +1,24 @@
 ---
-title: "Iconicity Analyses"
-output: pdf_document
+title: The Trajectory of Early Lexical Acquisition is Invariant to Iconicity and Modality: The Case of Number Words
+author:
+- Clifton, Langdon, Ph.D.
+- Emily Carrigan, Ph.D. (code author)
+- Marie Coppola, Ph.D
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_float: yes
+  word_document:
+    toc: yes
+date: "Code last edited  `r format(Sys.time(), '%d %m, %Y')`"
 ---
+
+
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -19,23 +36,19 @@ package.check <- lapply(packages, FUN = function(x) {
     library(x, character.only = TRUE)
   }
 })
-
-#verify they are loaded
-search()
-
 ```
 
 ### Check and then set working dir
-```{r results='hide', echo=FALSE}
-setwd("/Users/emilycarrigan/Dropbox/Data Analysis Work") ##this should be wherever your file is saved 
+```{r results="hide", echo=FALSE}
+# setwd("") ##this should be wherever your file is saved 
 
-GiveN <- read.csv("GN_Smsummary_Lgall_KW_201106.csv", na.strings = c("N/A", "I/R", "", "TBD")) #import the data file (which I already saved as a csv from excel file)
+GiveN <- read.csv("GN_Smsummary_Lgall_KW_201106.csv", na.strings = c("N/A", "I/R", "", "TBD", "N/R")) #import the data file (which I already saved as a csv from excel file)
 typeof(GiveN) # when importing using read.csv, resulting obj type is a list
 View(GiveN)
 ```
 
 ### DATA CLEANING/PREP/CHECK
-```{r}
+```{r results="hide", echo=FALSE, include=FALSE}
 GiveN_subset <- GiveN[1:237,] #if you need to remove blank rows/unnecessary columns in the dataframe, subset by [row,column] ranges
 View(GiveN_subset)
 GiveN_subset <- subset(GiveN_subset, Including.in.Study.=='Yes' & Including_GiveN.=='Yes' & GN_Small_Ceiling._FinalSet_conservative!='') # This can be amended as necessary for the specific analyses 
@@ -50,82 +63,62 @@ summary(GiveN_subset) # check whether have missing values for any variables
 #reorder factor levels for Language Group so they show up in order I want them
 GiveN_subset$LanguageGroup <- as.factor(factor(as.character(GiveN_subset$Group_4cat), levels = c("English Early", "ASL Early", "English Later", "ASL Later"), exclude=NA))
 
-#BELOW uses names in MASTER spreadsheet
-GiveN_subset$GN_sm_fac_c <- as.factor(GiveN_subset$GN_Small_Ceiling._FinalSet_conservative)
-GiveN_subset$GN_ALL_sm_fac <- as.factor(GiveN_subset$GN_Small_Ceiling._FinalSet)
-
 
 #Create Modality and Timing variables and add to dataframe
 GiveN_subset$Language_Modality <- ifelse(GiveN_subset$Group_4cat == "English Early" | GiveN_subset$Group_4cat == "English Later", "English", "ASL")
 
 GiveN_subset$Language_Timing <- factor(as.character(GiveN_subset$Group_2cat), levels = c("Early", "Later"), exclude="")
-##ORDER MATTERS - I initially acidentally ordered things "Later", "Early", which actually reversed the automatically alphabetically ordered variables in the original Group2Cat (and labeled the opposite of what they actually were--didn't realize until I ran the models and was confused about why it seemed like Early exposed kids were doing worse--YIKES!)
 
+GiveN_subset <-  dplyr::mutate(GiveN_subset, highestcorr_to5 = ifelse(GN_Small_Ceiling._FinalSet_conservative==6, 5, GN_Small_Ceiling._FinalSet_conservative))
+
+GiveN_subset$GN_smto5_fac <- as.factor(GiveN_subset$highestcorr_to5)
+
+##CREATE PERCENT correct Give-N LARGE measure (second analysis) - drawn from data in 5 separate columns 
+GiveN_subset <-  dplyr::mutate(GiveN_subset, t7_corr = ifelse(is.na(GiveN_subset$Target7_FinalSet_Correct.), GiveN_subset$Target7_1st_Response_Fish_Correct., GiveN_subset$Target7_FinalSet_Correct.))
+GiveN_subset <-  dplyr::mutate(GiveN_subset, t9_corr = ifelse(is.na(GiveN_subset$Target9_FinalSet_Correct.), GiveN_subset$Target9_1st_Response_Fish_Correct., GiveN_subset$Target9_FinalSet_Correct.))
+GiveN_subset <-  dplyr::mutate(GiveN_subset, t10_corr = ifelse(is.na(GiveN_subset$Target10_FinalSet_Correct.), GiveN_subset$Target10_1st_Response_Fish_Correct., GiveN_subset$Target10_FinalSet_Correct.))
+GiveN_subset <-  dplyr::mutate(GiveN_subset, t12_corr = ifelse(is.na(GiveN_subset$Target12_FinalSet_Correct.), GiveN_subset$Target12_1st_Response_Fish_Correct., GiveN_subset$Target12_FinalSet_Correct.))
+GiveN_subset <-  dplyr::mutate(GiveN_subset, t16_corr = ifelse(is.na(GiveN_subset$Target16_FinalSet_Correct.), GiveN_subset$Target16_1st_Response_Fish_Correct., GiveN_subset$Target16_FinalSet_Correct.))
+
+
+#Calculate mean proportion correct for Give-N trials 7, 9, 10, 12, & 16 (only for kids who got all five trials)
+
+# Code below will appropriately *not* calculate mean (puts "NA") if any trial from above columns has NA value--THIS IS CORRECT, bc doing a proportion correct out of different numbers of trials for different kids is a no-go
+GiveN_subset <-  GiveN_subset %>% rowwise() %>% dplyr::mutate(GNLg_propcorr_NA=mean(c(t7_corr, t9_corr, t10_corr, t12_corr, t16_corr)))
+```
+
+### Subset to Early-exposed participants only
+```{r}
 #subset only Early-exposed participants
 GiveN_Early <- subset(GiveN_subset, GiveN_subset$Language_Timing=="Early" & GiveN_subset$Age>=3.4)
 #removing the kids in English early under Age 3.4 (youngest age for ASL early) to age match the samples a bit better only removes 3 kids (now 101 instead of 104)
 View(GiveN_Early)
 ```
 
-### ASSIGN shorter VARIABLE names
-```{r}
-#outcome vars (these two are the same variable, but represented as either an integer or a factor)
-GN_sm_int <- GiveN_Early$GN_Small_Ceiling._FinalSet_conservative #KL drawing only from Give-N small data (which all children completed)
-GN_sm_fac <- GiveN_Early$GN_sm_fac_c
-
-#predictors
-Age <- GiveN_Early$Age
-SES <- GiveN_Early$SES..8.66.
-LangGrp <- GiveN_Early$LanguageGroup
-Count_NObj <- GiveN_Early$Highest_Count_noobj
-Count_WObj <- GiveN_Early$Highest_Count_wobj
-MAX_count_seq <- GiveN_Early$MAX_COUNT_SEQ
-Modality <- GiveN_Early$Language_Modality
-Timing <- GiveN_Early$Language_Timing
-
-```
-
 
 ### Demographics & Basic plots
 ```{r}
-summary(Age)
-sd(Age)
-summary(Age >7) #tells you how many kids over age 7
-summary(Age ==7)
-summary(Age=='')#check for missing values
-summary(SES)
-sd(SES)
-summary(SES=='')#check for missing values
-
-summary(LangGrp)
-summary(Timing)
-summary(Modality)
-summary(Count_NObj)
+table(GiveN_Early$Language_Modality, GiveN_Early$GN_smto5_fac, useNA = "always") # Table of knower-levels by Language Modality
+prop.table(table(GiveN_Early$Language_Modality, GiveN_Early$GN_smto5_fac, useNA = "always"), margin=1) #proportions calculated by row (within language group)
 
 #TO GET AGES/SES etc by group
-aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = mean) # gives means by group!!!
-aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = min) # gives means by group!!!
-aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = max) # gives means by group!!!
-aggregate(formula = GiveN_Early$Age~GiveN_Early$LanguageGroup, FUN = sd) # gives means by group!!!
-
-ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=LangGrp, y=Age)) + geom_violin() + labs(x="Language Group", y="Age (years)")
-
-
-aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = mean) # gives means by group!!!
-aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = min) # gives means by group!!!
-aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = max) # gives means by group!!!
-aggregate(formula = GiveN_Early$SES..8.66. ~ GiveN_Early$LanguageGroup, FUN = sd) # gives means by group!!!
-
-jitter <- position_jitter(width=0.2, height=0.1)
-
-ggplot(data=subset(GiveN_Early, (Language_Modality=="ASL")), aes(x=SES..8.66., y=..count..)) + geom_density()
-ggplot(data=subset(GiveN_Early, (Language_Modality=="English")), aes(x=SES..8.66., y=..count..)) + geom_density()
+ggplot(data=GiveN_Early, aes(x=Language_Modality, y=Age)) + geom_violin() + labs(x="Language Modality", y="Age (years)")
 
 ggplot(data=subset(GiveN_Early, (Language_Modality=="ASL")), aes(x=Age, y=..count..)) + geom_density()
 ggplot(data=subset(GiveN_Early, (Language_Modality=="English")), aes(x=Age, y=..count..)) + geom_density()
 
-ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geom_point(aes(shape=Modality, color=Modality), position=jitter, size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 6)")
-ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GN_sm_int)) + geom_jitter(aes(shape=Modality, color=Modality), size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 6)")
+ggplot(data=GiveN_Early, aes(x=Language_Modality, y=SES..8.66.)) + geom_violin() + labs(x="Language Modality", y="SES")
+
+ggplot(data=subset(GiveN_Early, (Language_Modality=="ASL")), aes(x=SES..8.66., y=..count..)) + geom_density()
+ggplot(data=subset(GiveN_Early, (Language_Modality=="English")), aes(x=SES..8.66., y=..count..)) + geom_density()
+
+
+# Give-N by Age/Modality w/tiny jitter
+jitter <- position_jitter(width=0.2, height=0.1)
+ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GNsm_to_5)) + geom_point(aes(shape=Modality, color=Modality), position=jitter, size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 5)") + theme(text = element_text(size=11), legend.position = c(0.87, 0.14)) + scale_y_continuous(breaks = seq(0, 5, by = 1), limits=c(0,5))
+
+# Give-N by Age/Modality actual jitter plot
+ggplot(data=subset(GiveN_Early, !is.na(LangGrp)), aes(x=Age, y=GNsm_to_5)) + geom_jitter(aes(shape=Modality, color=Modality), size=2.5) + geom_smooth(mapping=aes(group=Modality, color=Modality), method="loess", se=FALSE) + labs(x="Age (years)", y="Give-N highest number correctly given (up to 5)") + theme(text = element_text(size=11), legend.position = c(0.87, 0.14)) + scale_y_continuous(breaks = seq(0, 5, by = 1), limits=c(0,5))
 ```
 
 ### Subsetting the data by age
